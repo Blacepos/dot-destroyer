@@ -19,7 +19,6 @@ pub struct FromPlayer;
 pub struct FromEnemy;
 
 
-/// The 
 #[derive(Component)]
 pub struct ShipStats {
     pub radius: f32,
@@ -43,7 +42,7 @@ pub struct BulletStats {
 
 
 #[derive(Component)]
-pub struct ShootTimer {
+pub struct Gun {
     pub timer: Timer,
     pub is_shooting: bool,
 }
@@ -70,7 +69,7 @@ pub struct ShipBundle {
     pub ship_stats: ShipStats,
     pub vel: Velocity,
     pub accel: Accel,
-    pub shoot_timer: ShootTimer,
+    pub gun: Gun,
     pub aiming_at: AimingAt,
     pub movable: Movable,
 
@@ -97,7 +96,7 @@ impl ShipBundle {
             },
             vel: Velocity(Vec3::ZERO),
             accel: Accel(Vec3::ZERO),
-            shoot_timer: ShootTimer {
+            gun: Gun {
                 timer: Timer::new(Duration::from_millis(500), false),
                 is_shooting: false
             },
@@ -114,7 +113,7 @@ impl ShipBundle {
 
     #[allow(dead_code)]
     pub fn with_firing_rate(mut self, rate: Duration) -> Self {
-        self.shoot_timer.timer.set_duration(rate);
+        self.gun.timer.set_duration(rate);
         self
     }
 
@@ -136,6 +135,11 @@ impl ShipBundle {
         self
     }
     
+    #[allow(dead_code)]
+    pub fn always_shooting(mut self) -> Self {
+        self.gun.is_shooting = true;
+        self
+    }
 }
 
 

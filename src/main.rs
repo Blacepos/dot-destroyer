@@ -1,9 +1,13 @@
 use std::time::Duration;
 
 use bevy::{prelude::*, window::PresentMode};
+use bevy_prototype_debug_lines::*;
 
 use components::*;
+use helpers::*;
+
 mod components;
+mod helpers;
 
 const MUSIC: &str = "dot_destroyer3-beta00.ogg";
 
@@ -14,7 +18,7 @@ const PLAYER_COLOR: Color = Color::rgb(0.0, 0.28, 0.95);
 
 const WIN_SIZE: (f32, f32) = (800.0, 600.0);
 
-const DESPAWN_RADIUS: f32 = WIN_SIZE.0 + 100.0;
+const DESPAWN_DIST: f32 = WIN_SIZE.0 + 100.0;
 
 fn main() {
     App::new()
@@ -28,15 +32,16 @@ fn main() {
         })
         .insert_resource(ClearColor(Color::BLACK))
         .add_plugins(DefaultPlugins)
+        .add_plugin(DebugLinesPlugin::default())
         .add_startup_system(initialize)
         .add_startup_system(start_music)
+        .add_system(player_shoot.before(tick_shoot_timers))
+        .add_system(enemy_ai_move.before(tick_shoot_timers))
+        .add_system(tick_shoot_timers.before(move_entities))
         .add_system(handle_move.before(accel_entities))
         .add_system(accel_entities.before(move_entities))
         .add_system(move_entities)
         .add_system(wrap_player.after(move_entities))
-        .add_system(tick_shoot_timers)
-        .add_system(player_shoot.before(tick_shoot_timers))
-        .add_system(enemy_ai_move.before(tick_shoot_timers))
         .run();
         
 }
@@ -68,6 +73,8 @@ fn initialize(
         1.0
     )
         .with_max_speed(7.0 * 60.0)
+        .with_firing_rate(Duration::from_millis(400))
+        .always_shooting()
     )
         .insert(Enemy);
 }
@@ -102,9 +109,9 @@ fn handle_move(kb: Res<Input<KeyCode>>, mut query: Query<(&mut Accel, &ShipStats
 fn player_shoot(
     windows: Res<Windows>,
     mouse: Res<Input<MouseButton>>,
-    mut query: Query<(&mut ShootTimer, &mut AimingAt, &Transform), With<Player>>
+    mut query: Query<(&mut Gun, &mut AimingAt, &Transform), With<Player>>
 ) {
-    let (mut shoot_timer, mut aiming_at, player_tf) = query.get_single_mut()
+    let (mut gun, mut aiming_at, player_tf) = query.get_single_mut()
         .expect("Player should exist. player_shoot");
     let window = windows.get_primary()
         .expect("A primary window should exist. player_shoot");
@@ -119,50 +126,59 @@ fn player_shoot(
         aiming_at.0 = mpos - player_tf.translation;
     }
 
-    if mouse.just_released(MouseButton::Left) {
-        shoot_timer.is_shooting = false;
-    }
-    if mouse.just_pressed(MouseButton::Left) {
-        shoot_timer.is_shooting = true;
-        shoot_timer.timer.reset();
-    }
+    gun.is_shooting = mouse.pressed(MouseButton::Left);
 }
 
 /// Accelerate each enemy towards the player
 fn enemy_ai_move(
-    mut enemy_query: Query<(&mut Accel, &Transform, &ShipStats, &mut AimingAt), With<Enemy>>,
-    player_query: Query<&Transform, With<Player>>
+    time: Res<Time>,
+    mut lines: ResMut<DebugLines>,
+    mut enemy_query: Query<(&mut Accel, &Transform, &ShipStats, &mut AimingAt, &Velocity), With<Enemy>>,
+    player_query: Query<(&Transform, &Velocity), With<Player>>
 ) {
-    let player_pos = player_query.get_single().expect("Player should exist. enemy_ai_move").translation;
-
-    for (mut accel, enemy_tf, ship_stats, mut aiming_at) in enemy_query.iter_mut() {
+    let (player_tf, player_vel) = player_query.get_single().expect("Player should exist. enemy_ai_move");
+    let player_pos = player_tf.translation;
+    
+    for (mut accel, enemy_tf, ship_stats, mut aiming_at, enemy_vel) in enemy_query.iter_mut() {
         let enemy_pos = enemy_tf.translation;
-
-        // have the enemy move towards the player
-        accel.0 = (player_pos.truncate() - enemy_pos.truncate())
+        let next_enemy = enemy_pos + enemy_vel.0 * time.delta_seconds();
+        
+        let toward_player = (player_pos.truncate() - next_enemy.truncate())
             .extend(0.0)
             .try_normalize()
-            .unwrap_or(Vec3::X)
-            * ship_stats.base_accel;
+            .unwrap_or(Vec3::X);
         
-        aiming_at.0 = player_pos;
+        
+        let future_player = predict(player_pos, player_vel.0, next_enemy, BULLET_SPEED).unwrap_or(Vec3::X);
+        // lines.line(next_enemy, future_player, 0.0);
+
+        let ahead_of_player = (future_player.truncate() - next_enemy.truncate())
+            .extend(0.0)
+            .try_normalize()
+            .unwrap_or(Vec3::X);
+        
+        // have the enemy move towards the player
+        accel.0 = toward_player * ship_stats.base_accel;
+
+        // have them shoot ahead of the player
+        aiming_at.0 = ahead_of_player;
     }
 }
 
-/// Ticks all ShootTimer components and spawns bullet if timer done
+/// Ticks all Gun components and spawns bullet if timer done
 fn tick_shoot_timers(
     mut commands: Commands,
     time: Res<Time>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
-    mut query: Query<(&mut ShootTimer, &ShipStats, &Transform, &AimingAt)>
+    mut query: Query<(&mut Gun, &ShipStats, &Transform, &AimingAt)>
 ) {
-    for (mut timer, ship_stats, ship_tf, aiming_at) in query.iter_mut() {
-        if timer.is_shooting {
-            timer.timer.tick(time.delta());
+    for (mut gun, ship_stats, ship_tf, aiming_at) in query.iter_mut() {
+        gun.timer.tick(time.delta());
+        if gun.is_shooting {
 
-            if timer.timer.finished() {
-                timer.timer.reset();
+            if gun.timer.finished() {
+                gun.timer.reset();
 
                 // spawn bullet
                 commands.spawn_bundle(BulletBundle::new(
@@ -175,7 +191,7 @@ fn tick_shoot_timers(
                     ship_tf.translation
                 ));
             }
-        }
+        }   
     }
 }
 
@@ -198,10 +214,10 @@ fn move_entities(
 
         
         if movable.auto_despawn
-            && (tf.translation.x > DESPAWN_RADIUS
-            || tf.translation.x < -DESPAWN_RADIUS
-            || tf.translation.y > DESPAWN_RADIUS
-            || tf.translation.y < -DESPAWN_RADIUS) {
+            && (tf.translation.x > DESPAWN_DIST
+            || tf.translation.x < -DESPAWN_DIST
+            || tf.translation.y > DESPAWN_DIST
+            || tf.translation.y < -DESPAWN_DIST) {
             
             commands.entity(entity).despawn();
         }

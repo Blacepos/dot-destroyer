@@ -7,3 +7,4 @@ edition = "2021"
 
 [dependencies]
 bevy = { version = "0.8.1", features = ["dynamic"] }
+bevy_prototype_debug_lines = "0.8.1"
