@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use bevy::{prelude::*, window::PresentMode};
 
 use components::*;
@@ -5,17 +7,21 @@ mod components;
 
 const MUSIC: &str = "dot_destroyer3-beta00.ogg";
 
-const BULLET_SPEED: f32 = 200.0;
+const BULLET_SPEED: f32 = 400.0;
 
 const ENEMY_COLOR: Color = Color::rgb(0.91, 0.64, 0.0);
 const PLAYER_COLOR: Color = Color::rgb(0.0, 0.28, 0.95);
+
+const WIN_SIZE: (f32, f32) = (800.0, 600.0);
+
+const DESPAWN_RADIUS: f32 = WIN_SIZE.0 + 100.0;
 
 fn main() {
     App::new()
         .insert_resource(WindowDescriptor {
             title: "Dot Destroyer 2 Beta".to_string(),
-            width: 800.0,
-            height: 600.0,
+            width: WIN_SIZE.0,
+            height: WIN_SIZE.1,
             present_mode: PresentMode::AutoVsync,
             resizable: false,
             ..default()
@@ -29,8 +35,8 @@ fn main() {
         .add_system(move_entities)
         .add_system(wrap_player.after(move_entities))
         .add_system(tick_shoot_timers)
-        .add_system(player_shoot)
-        .add_system(enemy_ai_move)
+        .add_system(player_shoot.before(tick_shoot_timers))
+        .add_system(enemy_ai_move.before(tick_shoot_timers))
         .run();
         
 }
@@ -49,6 +55,8 @@ fn initialize(
         0.0
     )
         .with_max_speed(f32::INFINITY)
+        .with_firing_rate(Duration::from_millis(200))
+        .with_base_accel(25.0 * 60.0)
     )
         .insert(Player);
 
@@ -58,7 +66,9 @@ fn initialize(
         6.5,
         ENEMY_COLOR,
         1.0
-    ))
+    )
+        .with_max_speed(7.0 * 60.0)
+    )
         .insert(Enemy);
 }
 
@@ -69,7 +79,7 @@ fn start_music(
     audio.play(asset_server.load(MUSIC));
 }
 
-/// Checks keyboard input and sets the player's velocity accordingly
+/// Checks keyboard input and sets the player's acceleration accordingly
 fn handle_move(kb: Res<Input<KeyCode>>, mut query: Query<(&mut Accel, &ShipStats), With<Player>>) {
     let (mut accel, ship_stats) = query.get_single_mut().expect("Player should exist. handle_move");
     accel.0.x = 0.0;
@@ -118,13 +128,14 @@ fn player_shoot(
     }
 }
 
+/// Accelerate each enemy towards the player
 fn enemy_ai_move(
-    mut enemy_query: Query<(&mut Accel, &Transform, &ShipStats), With<Enemy>>,
+    mut enemy_query: Query<(&mut Accel, &Transform, &ShipStats, &mut AimingAt), With<Enemy>>,
     player_query: Query<&Transform, With<Player>>
 ) {
     let player_pos = player_query.get_single().expect("Player should exist. enemy_ai_move").translation;
 
-    for (mut accel, enemy_tf, ship_stats) in enemy_query.iter_mut() {
+    for (mut accel, enemy_tf, ship_stats, mut aiming_at) in enemy_query.iter_mut() {
         let enemy_pos = enemy_tf.translation;
 
         // have the enemy move towards the player
@@ -133,6 +144,8 @@ fn enemy_ai_move(
             .try_normalize()
             .unwrap_or(Vec3::X)
             * ship_stats.base_accel;
+        
+        aiming_at.0 = player_pos;
     }
 }
 
@@ -175,9 +188,23 @@ fn accel_entities(time: Res<Time>, mut query: Query<(&mut Velocity, &Accel, &Shi
 }
 
 /// Increases the position of each entity by the velocity
-fn move_entities(time: Res<Time>, mut query: Query<(&mut Transform, &Velocity)>) {
-    for (mut tf, vel) in query.iter_mut() {
+fn move_entities(
+    mut commands: Commands,    
+    time: Res<Time>,
+    mut query: Query<(&mut Transform, &Velocity, &Movable, Entity)>
+) {
+    for (mut tf, vel, movable, entity) in query.iter_mut() {
         tf.translation += vel.0 * time.delta_seconds();
+
+        
+        if movable.auto_despawn
+            && (tf.translation.x > DESPAWN_RADIUS
+            || tf.translation.x < -DESPAWN_RADIUS
+            || tf.translation.y > DESPAWN_RADIUS
+            || tf.translation.y < -DESPAWN_RADIUS) {
+            
+            commands.entity(entity).despawn();
+        }
     }
 }
 
@@ -201,6 +228,4 @@ fn wrap_player(windows: Res<Windows>, mut query: Query<(&mut Transform, &ShipSta
         z: t.z
     }
 }
-
-
 

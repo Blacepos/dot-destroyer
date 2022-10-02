@@ -59,6 +59,11 @@ pub struct Accel(pub Vec3);
 #[derive(Component)]
 pub struct AimingAt(pub Vec3);
 
+#[derive(Component)]
+pub struct Movable {
+    pub auto_despawn: bool
+}
+
 
 #[derive(Bundle)]
 pub struct ShipBundle {
@@ -67,6 +72,7 @@ pub struct ShipBundle {
     pub accel: Accel,
     pub shoot_timer: ShootTimer,
     pub aiming_at: AimingAt,
+    pub movable: Movable,
 
     #[bundle]
     pub body: MaterialMesh2dBundle<ColorMaterial>
@@ -87,7 +93,7 @@ impl ShipBundle {
                 damage: 1.0,
                 base_health: 100.0,
                 color: color,
-                max_speed: 500.0
+                max_speed: 400.0,
             },
             vel: Velocity(Vec3::ZERO),
             accel: Accel(Vec3::ZERO),
@@ -102,6 +108,7 @@ impl ShipBundle {
                 ..default()
             },
             aiming_at: AimingAt(Vec3::X),
+            movable: Movable { auto_despawn: false },
         }
     }
 
@@ -112,8 +119,8 @@ impl ShipBundle {
     }
 
     #[allow(dead_code)]
-    pub fn with_speed(mut self, speed: f32) -> Self {
-        self.ship_stats.base_accel = speed;
+    pub fn with_base_accel(mut self, base_accel: f32) -> Self {
+        self.ship_stats.base_accel = base_accel;
         self
     }
 
@@ -137,6 +144,7 @@ pub struct BulletBundle {
     vel: Velocity,
     bullet_stats: BulletStats,
     bullet: Bullet,
+    movable: Movable,
 
     #[bundle]
     body: MaterialMesh2dBundle<ColorMaterial>
@@ -164,7 +172,8 @@ impl BulletBundle {
                 material: materials.add(ColorMaterial::from(color)),
                 ..default()
             },
-            bullet: Bullet
+            bullet: Bullet,
+            movable: Movable { auto_despawn: true },
         }
     }
 }
