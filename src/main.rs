@@ -1,4 +1,4 @@
-use bevy::{prelude::*, window::PresentMode, audio::AudioSink};
+use bevy::{prelude::*, window::PresentMode};
 
 use components::*;
 mod components;
@@ -6,6 +6,9 @@ mod components;
 const MUSIC: &str = "dot_destroyer3-beta00.ogg";
 
 const BULLET_SPEED: f32 = 200.0;
+
+const ENEMY_COLOR: Color = Color::rgb(0.91, 0.64, 0.0);
+const PLAYER_COLOR: Color = Color::rgb(0.0, 0.28, 0.95);
 
 fn main() {
     App::new()
@@ -27,23 +30,36 @@ fn main() {
         .add_system(wrap_player.after(move_entities))
         .add_system(tick_shoot_timers)
         .add_system(player_shoot)
+        .add_system(enemy_ai_move)
         .run();
         
 }
 
 fn initialize(
     mut commands: Commands,
-    meshes: ResMut<Assets<Mesh>>,
-    materials: ResMut<Assets<ColorMaterial>>
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>
 ) {
     commands.spawn_bundle(Camera2dBundle::default());
     commands.spawn_bundle(ShipBundle::new(
-        meshes,
-        materials,
+        &mut meshes,
+        &mut materials,
         8.0,
-        Color::rgb(0.0, 0.28, 0.95)
-    ))
+        PLAYER_COLOR,
+        0.0
+    )
+        .with_max_speed(f32::INFINITY)
+    )
         .insert(Player);
+
+    commands.spawn_bundle(ShipBundle::new(
+        &mut meshes,
+        &mut materials,
+        6.5,
+        ENEMY_COLOR,
+        1.0
+    ))
+        .insert(Enemy);
 }
 
 fn start_music(
@@ -102,6 +118,24 @@ fn player_shoot(
     }
 }
 
+fn enemy_ai_move(
+    mut enemy_query: Query<(&mut Accel, &Transform, &ShipStats), With<Enemy>>,
+    player_query: Query<&Transform, With<Player>>
+) {
+    let player_pos = player_query.get_single().expect("Player should exist. enemy_ai_move").translation;
+
+    for (mut accel, enemy_tf, ship_stats) in enemy_query.iter_mut() {
+        let enemy_pos = enemy_tf.translation;
+
+        // have the enemy move towards the player
+        accel.0 = (player_pos.truncate() - enemy_pos.truncate())
+            .extend(0.0)
+            .try_normalize()
+            .unwrap_or(Vec3::X)
+            * ship_stats.base_accel;
+    }
+}
+
 /// Ticks all ShootTimer components and spawns bullet if timer done
 fn tick_shoot_timers(
     mut commands: Commands,
@@ -133,9 +167,10 @@ fn tick_shoot_timers(
 }
 
 /// Increases the velocity of each entity by the acceleration
-fn accel_entities(time: Res<Time>, mut query: Query<(&mut Velocity, &Accel)>) {
-    for (mut vel, accel) in query.iter_mut() {
+fn accel_entities(time: Res<Time>, mut query: Query<(&mut Velocity, &Accel, &ShipStats)>) {
+    for (mut vel, accel, ship_stats) in query.iter_mut() {
         vel.0 += accel.0 * time.delta_seconds();
+        vel.0 = vel.0.clamp_length_max(ship_stats.max_speed);
     }
 }
 

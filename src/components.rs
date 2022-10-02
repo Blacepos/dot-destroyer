@@ -24,6 +24,7 @@ pub struct FromEnemy;
 pub struct ShipStats {
     pub radius: f32,
     pub base_accel: f32,
+    pub max_speed: f32,
     pub damage: f32,
     pub base_health: f32,
     pub color: Color
@@ -73,10 +74,11 @@ pub struct ShipBundle {
 
 impl ShipBundle {
     pub fn new(
-        mut meshes: ResMut<Assets<Mesh>>,
-        mut materials: ResMut<Assets<ColorMaterial>>,
+        meshes: &mut ResMut<Assets<Mesh>>,
+        materials: &mut ResMut<Assets<ColorMaterial>>,
         radius: f32,
-        color: Color
+        color: Color,
+        z_offset: f32
     ) -> Self {
         ShipBundle {
             ship_stats: ShipStats {
@@ -84,7 +86,8 @@ impl ShipBundle {
                 base_accel: 1000.0,
                 damage: 1.0,
                 base_health: 100.0,
-                color: color
+                color: color,
+                max_speed: 500.0
             },
             vel: Velocity(Vec3::ZERO),
             accel: Accel(Vec3::ZERO),
@@ -94,7 +97,7 @@ impl ShipBundle {
             },
             body: MaterialMesh2dBundle {
                 mesh: meshes.add(Mesh::from(shape::Circle::new(radius))).into(),
-                transform: Transform::default(),
+                transform: Transform::from_translation(Vec3::new(0.0, 0.0, z_offset)),
                 material: materials.add(ColorMaterial::from(color)),
                 ..default()
             },
@@ -102,18 +105,27 @@ impl ShipBundle {
         }
     }
 
-    pub fn with_firing_rate(&mut self, rate: Duration) -> &mut Self {
+    #[allow(dead_code)]
+    pub fn with_firing_rate(mut self, rate: Duration) -> Self {
         self.shoot_timer.timer.set_duration(rate);
         self
     }
 
-    pub fn with_speed(&mut self, speed: f32) -> &mut Self {
+    #[allow(dead_code)]
+    pub fn with_speed(mut self, speed: f32) -> Self {
         self.ship_stats.base_accel = speed;
         self
     }
 
-    pub fn with_damage(&mut self, damage: f32) -> &mut Self {
+    #[allow(dead_code)]
+    pub fn with_damage(mut self, damage: f32) -> Self {
         self.ship_stats.damage = damage;
+        self
+    }
+    
+    #[allow(dead_code)]
+    pub fn with_max_speed(mut self, max_speed: f32) -> Self {
+        self.ship_stats.max_speed = max_speed;
         self
     }
     
