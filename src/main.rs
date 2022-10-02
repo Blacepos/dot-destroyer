@@ -23,7 +23,7 @@ const DESPAWN_DIST: f32 = WIN_SIZE.0 + 100.0;
 fn main() {
     App::new()
         .insert_resource(WindowDescriptor {
-            title: "Dot Destroyer 2 Beta".to_string(),
+            title: "Dot Destroyer 2 Alpha".to_string(),
             width: WIN_SIZE.0,
             height: WIN_SIZE.1,
             present_mode: PresentMode::AutoVsync,
@@ -132,7 +132,6 @@ fn player_shoot(
 /// Accelerate each enemy towards the player
 fn enemy_ai_move(
     time: Res<Time>,
-    mut lines: ResMut<DebugLines>,
     mut enemy_query: Query<(&mut Accel, &Transform, &ShipStats, &mut AimingAt, &Velocity), With<Enemy>>,
     player_query: Query<(&Transform, &Velocity), With<Player>>
 ) {
