@@ -4,11 +4,11 @@ This is a remake of a game I made in 2018 using the [LÖVE](https://love2d.org/)
 
 ## Building from source
 
-There are currently no binaries available for the game, but if you wish to compile it yourself, you will have to download Rust: https://rustup.rs. The link will guide you to install the Rust compiler and build tools.
+If you wish to compile it yourself, you will have to download Rust: https://rustup.rs. The link will guide you to install the Rust compiler and build tools.
 
-Once you have it installed, compiling should be as simple as:
+Once you have it installed, running it should be as simple as:
 ```sh
-cargo build --release --bin=DotDestroyer
+cargo run --release --bin=DotDestroyer
 ```
 You can find the binary in target/release.
 
