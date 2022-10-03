@@ -42,6 +42,8 @@ fn main() {
         .add_system(accel_entities.before(move_entities))
         .add_system(move_entities)
         .add_system(wrap_player.after(move_entities))
+        .add_system(bullet_damage.after(move_entities))
+        .add_system(bullet_cleanup)
         .run();
         
 }
@@ -62,6 +64,7 @@ fn initialize(
         .with_max_speed(f32::INFINITY)
         .with_firing_rate(Duration::from_millis(200))
         .with_base_accel(25.0 * 60.0)
+        .on_team(Teams::Player)
     )
         .insert(Player);
 
@@ -75,6 +78,7 @@ fn initialize(
         .with_max_speed(7.0 * 60.0)
         .with_firing_rate(Duration::from_millis(400))
         .always_shooting()
+        .on_team(Teams::Enemy)
     )
         .insert(Enemy);
 }
@@ -170,9 +174,9 @@ fn tick_shoot_timers(
     time: Res<Time>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
-    mut query: Query<(&mut Gun, &ShipStats, &Transform, &AimingAt)>
+    mut query: Query<(&mut Gun, &ShipStats, &Transform, &AimingAt, &Team)>
 ) {
-    for (mut gun, ship_stats, ship_tf, aiming_at) in query.iter_mut() {
+    for (mut gun, ship_stats, ship_tf, aiming_at, team) in query.iter_mut() {
         gun.timer.tick(time.delta());
         if gun.is_shooting {
 
@@ -187,7 +191,8 @@ fn tick_shoot_timers(
                     ship_stats.color,
                     ship_stats.damage,
                     aiming_at.0.try_normalize().unwrap_or(Vec3::X) * BULLET_SPEED,
-                    ship_tf.translation
+                    ship_tf.translation,
+                    team.0.clone()
                 ));
             }
         }   
@@ -244,3 +249,51 @@ fn wrap_player(windows: Res<Windows>, mut query: Query<(&mut Transform, &ShipSta
     }
 }
 
+/// Check if bullets are colliding with ships and apply damage
+fn bullet_damage(
+    mut ships: Query<(&mut Despawnable, &mut Health, &Transform, &ShipStats, &Team), Without<Bullet>>,
+    mut bullets: Query<(&mut Despawnable, &Transform, &BulletStats, &Team), With<Bullet>>
+) {
+    
+    // iterate over each ship
+    for (mut ship_despawn, mut ship_hp, ship_tf, ship_stats, ship_team) in ships.iter_mut() {
+
+        // check against bullets if the ship is alive
+        if ship_despawn.alive {
+            for (mut bullet_despawn, bullet_tf, bullet_stats, bullet_team) in bullets.iter_mut() {
+                
+                // check for collision if the bullet is alive and is on a different team
+                if bullet_despawn.alive && bullet_team.0 != ship_team.0 {
+                    let bullet_pos = bullet_tf.translation;
+                    // check for collision
+                    if circle_intersection(
+                        ship_tf.translation.reduce(),
+                        ship_stats.radius,
+                        bullet_pos.reduce(),
+                        bullet_stats.radius
+                    ) {
+                        
+                        // apply damage and remove bullet
+                        ship_hp.0 -= bullet_stats.damage;
+                        if ship_hp.0 <= 0.0 {
+                            ship_despawn.alive = false;
+                        }
+
+                        bullet_despawn.alive = false;
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn bullet_cleanup(
+    mut commands: Commands,
+    query: Query<(Entity, &Despawnable), With<Bullet>>
+) {
+    for (e, desp) in query.iter() {
+        if !desp.alive {
+            commands.entity(e).despawn();
+        }
+    }
+}

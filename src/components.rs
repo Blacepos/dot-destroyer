@@ -12,11 +12,13 @@ pub struct Enemy;
 
 
 #[derive(Component)]
-pub struct FromPlayer;
+pub struct Team(pub Teams);
 
-
-#[derive(Component)]
-pub struct FromEnemy;
+#[derive(PartialEq, Clone)]
+pub enum Teams {
+    Enemy,
+    Player
+}
 
 
 #[derive(Component)]
@@ -29,6 +31,8 @@ pub struct ShipStats {
     pub color: Color
 }
 
+#[derive(Component)]
+pub struct Health(pub f32);
 
 #[derive(Component)]
 pub struct Bullet;
@@ -40,6 +44,10 @@ pub struct BulletStats {
     pub damage: f32
 }
 
+#[derive(Component)]
+pub struct Despawnable {
+    pub alive: bool
+}
 
 #[derive(Component)]
 pub struct Gun {
@@ -72,6 +80,9 @@ pub struct ShipBundle {
     pub gun: Gun,
     pub aiming_at: AimingAt,
     pub movable: Movable,
+    pub health: Health,
+    pub team: Team,
+    pub despawnable: Despawnable,
 
     #[bundle]
     pub body: MaterialMesh2dBundle<ColorMaterial>
@@ -108,6 +119,9 @@ impl ShipBundle {
             },
             aiming_at: AimingAt(Vec3::X),
             movable: Movable { auto_despawn: false },
+            health: Health(100.0),
+            team: Team(Teams::Enemy),
+            despawnable: Despawnable { alive: true },
         }
     }
 
@@ -140,6 +154,19 @@ impl ShipBundle {
         self.gun.is_shooting = true;
         self
     }
+
+    #[allow(dead_code)]
+    pub fn with_base_health(mut self, health: f32) -> Self {
+        self.ship_stats.base_health = health;
+        self.health.0 = health;
+        self
+    }
+
+    #[allow(dead_code)]
+    pub fn on_team(mut self, team: Teams) -> Self {
+        self.team.0 = team;
+        self
+    }
 }
 
 
@@ -149,6 +176,8 @@ pub struct BulletBundle {
     bullet_stats: BulletStats,
     bullet: Bullet,
     movable: Movable,
+    despawnable: Despawnable,
+    team: Team,
 
     #[bundle]
     body: MaterialMesh2dBundle<ColorMaterial>
@@ -162,7 +191,8 @@ impl BulletBundle {
         color: Color,
         damage: f32,
         direction: Vec3,
-        position: Vec3
+        position: Vec3,
+        team: Teams
     ) -> Self {
         BulletBundle {
             bullet_stats: BulletStats {
@@ -178,6 +208,8 @@ impl BulletBundle {
             },
             bullet: Bullet,
             movable: Movable { auto_despawn: true },
+            despawnable: Despawnable { alive: true },
+            team: Team(team)
         }
     }
 }

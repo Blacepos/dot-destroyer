@@ -30,3 +30,22 @@ pub fn predict(target_pos: Vec3, target_vel: Vec3, proj_pos: Vec3, proj_speed: f
         None
     }
 }
+
+pub fn circle_intersection(a_pos: Vec3, a_r: f32, b_pos: Vec3, b_r: f32) -> bool {
+    let min_dist = a_r + b_r;
+    Vec3::distance_squared(a_pos, b_pos) <= min_dist * min_dist
+}
+
+pub trait Projection {
+    fn reduce(&self) -> Self;
+}
+
+impl Projection for Vec3 {
+    fn reduce(&self) -> Self {
+        Vec3 {
+            x: self.x,
+            y: self.y,
+            z: 0.0
+        }
+    }
+}
