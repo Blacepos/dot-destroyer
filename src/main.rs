@@ -37,7 +37,8 @@ fn main() {
         .add_startup_system(start_music)
         .add_system(player_shoot.before(tick_shoot_timers))
         .add_system(enemy_ai_move.before(tick_shoot_timers))
-        .add_system(tick_shoot_timers.before(move_entities))
+        .add_system(enemy_ai_aim.before(tick_shoot_timers))
+        .add_system(tick_shoot_timers.after(move_entities))
         .add_system(handle_move.before(accel_entities))
         .add_system(accel_entities.before(move_entities))
         .add_system(move_entities)
@@ -135,33 +136,44 @@ fn player_shoot(
 
 /// Accelerate each enemy towards the player
 fn enemy_ai_move(
-    time: Res<Time>,
-    mut enemy_query: Query<(&mut Accel, &Transform, &ShipStats, &mut AimingAt, &Velocity), With<Enemy>>,
-    player_query: Query<(&Transform, &Velocity), With<Player>>
+    mut enemy_query: Query<(&mut Accel, &Transform, &ShipStats), With<Enemy>>,
+    player_query: Query<&Transform, With<Player>>
 ) {
-    let (player_tf, player_vel) = player_query.get_single().expect("Player should exist. enemy_ai_move");
+    let player_tf = player_query.get_single().expect("Player should exist. enemy_ai_move");
     let player_pos = player_tf.translation;
     
-    for (mut accel, enemy_tf, ship_stats, mut aiming_at, enemy_vel) in enemy_query.iter_mut() {
+    for (mut accel, enemy_tf, ship_stats) in enemy_query.iter_mut() {
         let enemy_pos = enemy_tf.translation;
-        let next_enemy = enemy_pos + enemy_vel.0 * time.delta_seconds();
         
-        let toward_player = (player_pos.truncate() - next_enemy.truncate())
-            .extend(0.0)
+        let toward_player = (player_pos.reduce() - enemy_pos.reduce())
             .try_normalize()
             .unwrap_or(Vec3::X);
         
-        
-        let future_player = predict(player_pos, player_vel.0, next_enemy, BULLET_SPEED).unwrap_or(Vec3::X);
-        // lines.line(next_enemy, future_player, 0.0);
-
-        let ahead_of_player = (future_player.truncate() - next_enemy.truncate())
-            .extend(0.0)
-            .try_normalize()
-            .unwrap_or(Vec3::X);
         
         // have the enemy move towards the player
         accel.0 = toward_player * ship_stats.base_accel;
+    }
+}
+
+/// Make each enemy aim at the player
+fn enemy_ai_aim(
+    time: Res<Time>,
+    mut lines: ResMut<DebugLines>,
+    mut enemy_query: Query<(&Transform, &mut AimingAt), With<Enemy>>,
+    player_query: Query<(&Transform, &Velocity), With<Player>>
+) {
+    let (player_tf, player_vel) = player_query.get_single().expect("Player should exist. enemy_ai_aim");
+    let player_pos = player_tf.translation;
+    
+    for (enemy_tf, mut aiming_at) in enemy_query.iter_mut() {
+        let enemy_pos = enemy_tf.translation;
+        
+        let future_player = predict(player_pos + player_vel.0 * time.delta_seconds(), player_vel.0, enemy_pos, BULLET_SPEED).unwrap_or(Vec3::X);
+        lines.line(enemy_pos, future_player, 0.0);
+
+        let ahead_of_player = (future_player.reduce() - enemy_pos.reduce())
+            .try_normalize()
+            .unwrap_or(Vec3::X);
 
         // have them shoot ahead of the player
         aiming_at.0 = ahead_of_player;

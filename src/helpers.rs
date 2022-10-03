@@ -19,12 +19,12 @@ pub fn predict(target_pos: Vec3, target_vel: Vec3, proj_pos: Vec3, proj_speed: f
         let p = -b / a2;
         let q = f32::sqrt(discrim) / a2;
     
-        let t1 = p + q;
-        let t2 = p - q;
+        let t1 = p - q;
+        let t2 = p + q;
 
         let t = if 0.0 < t2 && t2 < t1 {t2} else {t1};
 
-        Some(target_pos - target_vel * t)
+        Some(target_pos + target_vel * t)
     }
     else {
         None
@@ -41,6 +41,7 @@ pub trait Projection {
 }
 
 impl Projection for Vec3 {
+    /// Project the Vec3 onto the X-Y plane, but remain a Vec3
     fn reduce(&self) -> Self {
         Vec3 {
             x: self.x,
